@@ -20,7 +20,7 @@ import (
 	"statusline/internal/transcript"
 )
 
-const gitTimeout = 200 * time.Millisecond
+const ioTimeout = 200 * time.Millisecond
 
 func main() {
 	// Per the design doc's error-handling rule: always exit 0 and always
@@ -54,7 +54,7 @@ func run(stdin *os.File) []string {
 		data.ModelName = "Claude"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
 	defer cancel()
 	if gs, err := gitstatus.CachedGet(ctx, in.Workspace.CurrentDir, in.SessionID, os.TempDir(), 5*time.Second); err == nil {
 		data.Git = gs
@@ -98,7 +98,9 @@ func evaluateCache(in *input.Input, cfg config.Config) cache.Result {
 		return cache.Result{State: cache.StateUnknown}
 	}
 
-	usage, err := transcript.LastAssistantUsage(in.TranscriptPath)
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	defer cancel()
+	usage, err := transcript.LastAssistantUsage(ctx, in.TranscriptPath)
 	if err != nil {
 		return cache.Result{State: cache.StateUnknown}
 	}

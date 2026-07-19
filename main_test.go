@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // buildBinary compiles the statusline binary once for this test file's use.
@@ -87,6 +89,33 @@ func TestMain_UsesHomeConfigOverride(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "/compact") {
 		t.Errorf("output = %q, want compact-due warning since threshold (10) is below used_percentage (50)", out)
+	}
+}
+
+func TestMain_ColdCacheDetectedFromTranscript(t *testing.T) {
+	bin := buildBinary(t)
+
+	// A transcript whose last assistant message wrote a 5m ephemeral cache
+	// entry 10 minutes ago: the 5m TTL auto-detects and has long since
+	// elapsed, so evaluateCache should land on cache.StateCold and the
+	// rendered alert line should show the cold-cache indicator.
+	tsPast := time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339Nano)
+	transcriptDir := t.TempDir()
+	transcriptPath := filepath.Join(transcriptDir, "transcript.jsonl")
+	line := fmt.Sprintf(`{"type":"assistant","timestamp":%q,"message":{"role":"assistant","usage":{"input_tokens":2,"cache_creation_input_tokens":701,"cache_read_input_tokens":0,"output_tokens":339,"cache_creation":{"ephemeral_5m_input_tokens":701,"ephemeral_1h_input_tokens":0}}}}`, tsPast)
+	if err := os.WriteFile(transcriptPath, []byte(line+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	input := fmt.Sprintf(`{"model":{"display_name":"Opus"},"workspace":{"current_dir":"/tmp"},"session_id":"test-session-cold","transcript_path":%q}`, transcriptPath)
+	cmd := exec.Command(bin)
+	cmd.Stdin = strings.NewReader(input)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("statusline exited with error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "cache cold") {
+		t.Errorf("output = %q, want it to contain the cold-cache indicator (\"cache cold\")", out)
 	}
 }
 

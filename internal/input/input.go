@@ -29,9 +29,9 @@ type Workspace struct {
 }
 
 type Cost struct {
-	TotalCostUSD      float64 `json:"total_cost_usd"`
-	TotalDurationMs   int64   `json:"total_duration_ms"`
-	TotalAPIDuration  int64   `json:"total_api_duration_ms"`
+	TotalCostUSD     float64 `json:"total_cost_usd"`
+	TotalDurationMs  int64   `json:"total_duration_ms"`
+	TotalAPIDuration int64   `json:"total_api_duration_ms"`
 }
 
 type ContextWindow struct {
