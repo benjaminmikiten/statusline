@@ -39,7 +39,10 @@ func run(stdin *os.File) []string {
 	}
 
 	homeDir, _ := os.UserHomeDir()
-	cfg, _ := config.Load(filepath.Join(homeDir, ".claude", "statusline-config.json"))
+	cfg, err := config.Load(filepath.Join(homeDir, ".claude", "statusline-config.json"))
+	if err != nil {
+		cfg = config.Default()
+	}
 
 	data := render.Data{
 		ModelName: in.Model.DisplayName,

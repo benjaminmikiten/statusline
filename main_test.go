@@ -89,3 +89,33 @@ func TestMain_UsesHomeConfigOverride(t *testing.T) {
 		t.Errorf("output = %q, want compact-due warning since threshold (10) is below used_percentage (50)", out)
 	}
 }
+
+func TestMain_MalformedConfigFallsBackToDefaults(t *testing.T) {
+	bin := buildBinary(t)
+
+	fakeHome := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(fakeHome, ".claude"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	cfgPath := filepath.Join(fakeHome, ".claude", "statusline-config.json")
+	if err := os.WriteFile(cfgPath, []byte(`not json`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// used_percentage (50) is below the real default threshold (80), but
+	// above the zero-value threshold that a discarded config.Load error
+	// would silently fall back to. If main.go used cfg.CompactThresholdPct
+	// == 0 from a zero-value Config, this would spuriously fire a
+	// compact-due warning.
+	input := `{"model":{"display_name":"Opus"},"workspace":{"current_dir":"/tmp"},"session_id":"test-session-malformed-cfg","context_window":{"used_percentage":50,"context_window_size":200000,"total_input_tokens":1000,"total_output_tokens":100}}`
+	cmd := exec.Command(bin)
+	cmd.Stdin = strings.NewReader(input)
+	cmd.Env = append(os.Environ(), "HOME="+fakeHome)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("statusline exited with error: %v\noutput: %s", err, out)
+	}
+	if strings.Contains(string(out), "/compact") {
+		t.Errorf("output = %q, want no compact-due warning: malformed config should fall back to config.Default() (threshold 80), not zero-value threshold 0", out)
+	}
+}
