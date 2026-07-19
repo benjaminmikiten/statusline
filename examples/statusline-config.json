@@ -1,0 +1,5 @@
+{
+  "compact_threshold_pct": 80,
+  "cache_ttl_override": "",
+  "color": true
+}
