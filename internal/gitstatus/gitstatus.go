@@ -74,10 +74,24 @@ func Get(ctx context.Context, dir string) (Status, error) {
 	}, nil
 }
 
+// sanitizeSessionID strips anything but [A-Za-z0-9_-] so an attacker-controlled
+// session_id (from Claude Code's stdin JSON) can't inject path separators or
+// ".." segments into the cache file path.
+func sanitizeSessionID(sessionID string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			return r
+		default:
+			return '_'
+		}
+	}, sessionID)
+}
+
 // CachedGet returns a cached Status for (dir, sessionID) if the cache file
 // in cacheDir is younger than maxAge, otherwise calls Get and refreshes it.
 func CachedGet(ctx context.Context, dir, sessionID, cacheDir string, maxAge time.Duration) (Status, error) {
-	cacheFile := filepath.Join(cacheDir, "statusline-git-cache-"+sessionID)
+	cacheFile := filepath.Join(cacheDir, "statusline-git-cache-"+sanitizeSessionID(sessionID))
 
 	if info, err := os.Stat(cacheFile); err == nil {
 		if time.Since(info.ModTime()) <= maxAge {

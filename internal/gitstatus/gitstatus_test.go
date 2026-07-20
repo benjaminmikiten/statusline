@@ -109,3 +109,69 @@ func TestCachedGet_ReusesWithinMaxAge(t *testing.T) {
 		t.Errorf("expected cache file %s to exist: %v", cacheFile, err)
 	}
 }
+
+func TestCachedGet_RerunsGitWhenCacheExpired(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	cacheDir := t.TempDir()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	first, err := CachedGet(ctx, dir, "session-b", cacheDir, 5*time.Second)
+	if err != nil {
+		t.Fatalf("CachedGet (first) returned error: %v", err)
+	}
+	if first.Branch != "main" {
+		t.Fatalf("first.Branch = %q, want %q", first.Branch, "main")
+	}
+
+	// Back-date the cache file past maxAge so the next call must re-run git
+	// rather than serve the (now stale) cached branch.
+	cacheFile := filepath.Join(cacheDir, "statusline-git-cache-session-b")
+	expired := time.Now().Add(-10 * time.Second)
+	if err := os.Chtimes(cacheFile, expired, expired); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+
+	runGit(t, dir, "checkout", "-b", "feature")
+
+	second, err := CachedGet(ctx, dir, "session-b", cacheDir, 5*time.Second)
+	if err != nil {
+		t.Fatalf("CachedGet (second) returned error: %v", err)
+	}
+	if second.Branch != "feature" {
+		t.Errorf("second.Branch = %q, want %q (expired cache should trigger a fresh git call)", second.Branch, "feature")
+	}
+}
+
+func TestCachedGet_SanitizesPathTraversalInSessionID(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	parent := t.TempDir()
+	cacheDir := filepath.Join(parent, "cache")
+	if err := os.Mkdir(cacheDir, 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	maliciousSessionID := "../../../../etc/evil"
+	if _, err := CachedGet(ctx, dir, maliciousSessionID, cacheDir, 5*time.Second); err != nil {
+		t.Fatalf("CachedGet returned error: %v", err)
+	}
+
+	escapedFile := filepath.Join(parent, "etc", "evil")
+	if _, err := os.Stat(escapedFile); err == nil {
+		t.Fatalf("cache file escaped cacheDir to %s via unsanitized session_id", escapedFile)
+	}
+
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		t.Fatalf("ReadDir(cacheDir): %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("cacheDir entries = %v, want exactly 1 cache file confined to cacheDir", entries)
+	}
+}
