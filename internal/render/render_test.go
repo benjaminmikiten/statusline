@@ -105,6 +105,89 @@ func TestLines_NoGitOmitsGitSegment(t *testing.T) {
 	}
 }
 
+func TestLines_ColdCacheColorsRedWhenColorEnabled(t *testing.T) {
+	d := Data{
+		ModelName:    "Opus",
+		Dir:          "/home/user/project",
+		CacheResult:  cache.Result{State: cache.StateCold, ElapsedSeconds: 30},
+		ContextState: contextstate.StateOK,
+		Color:        true,
+	}
+	lines := Lines(d)
+	if !strings.Contains(lines[2], ansiRed) {
+		t.Errorf("line 3 = %q, want cold alert wrapped in ansiRed when Color is true", lines[2])
+	}
+}
+
+func TestLines_DirtyGitBranchColorsRedWhenColorEnabled(t *testing.T) {
+	d := Data{
+		ModelName: "Opus",
+		Dir:       "/home/user/project",
+		Git:       gitstatus.Status{IsRepo: true, Branch: "main", Staged: 1, Modified: 0},
+		Color:     true,
+	}
+	lines := Lines(d)
+	if !strings.Contains(lines[0], ansiRed+"main"+ansiReset) {
+		t.Errorf("line 1 = %q, want branch name wrapped in ansiRed when dirty", lines[0])
+	}
+}
+
+func TestLines_CleanGitBranchNotColored(t *testing.T) {
+	d := Data{
+		ModelName: "Opus",
+		Dir:       "/home/user/project",
+		Git:       gitstatus.Status{IsRepo: true, Branch: "main", Staged: 0, Modified: 0},
+		Color:     true,
+	}
+	lines := Lines(d)
+	if strings.Contains(lines[0], ansiRed) {
+		t.Errorf("line 1 = %q, want no color on a clean branch", lines[0])
+	}
+}
+
+func TestLines_RateLimitPctColorRamped(t *testing.T) {
+	d := Data{
+		ModelName:   "Opus",
+		Dir:         "/home/user/project",
+		FiveHourPct: pf(95),
+		SevenDayPct: pf(50),
+		Color:       true,
+	}
+	lines := Lines(d)
+	if !strings.Contains(lines[1], ansiRed+"5h: 95%"+ansiReset) {
+		t.Errorf("line 2 = %q, want 5h pct wrapped in ansiRed at 95%%", lines[1])
+	}
+	if !strings.Contains(lines[1], ansiGreen+"7d: 50%"+ansiReset) {
+		t.Errorf("line 2 = %q, want 7d pct wrapped in ansiGreen at 50%%", lines[1])
+	}
+}
+
+func TestLines_CacheHitRateInvertedColorRamp(t *testing.T) {
+	d := Data{
+		ModelName:       "Opus",
+		Dir:             "/home/user/project",
+		CacheHitRatePct: pf(20),
+		Color:           true,
+	}
+	lines := Lines(d)
+	if !strings.Contains(lines[1], ansiRed+"cache: 20%"+ansiReset) {
+		t.Errorf("line 2 = %q, want low cache hit-rate (20%%) wrapped in ansiRed", lines[1])
+	}
+}
+
+func TestLines_CacheHitRateHighIsGreen(t *testing.T) {
+	d := Data{
+		ModelName:       "Opus",
+		Dir:             "/home/user/project",
+		CacheHitRatePct: pf(85),
+		Color:           true,
+	}
+	lines := Lines(d)
+	if !strings.Contains(lines[1], ansiGreen+"cache: 85%"+ansiReset) {
+		t.Errorf("line 2 = %q, want high cache hit-rate (85%%) wrapped in ansiGreen", lines[1])
+	}
+}
+
 func TestLines_NilContextUsedPctOmitsContextBar(t *testing.T) {
 	d := Data{
 		ModelName:      "Opus",

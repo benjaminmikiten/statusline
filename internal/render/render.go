@@ -64,6 +64,19 @@ func barColor(pct float64) string {
 	}
 }
 
+// hitRateColor ramps in the opposite direction of barColor: a high cache
+// hit-rate is good (green), a low one is bad (red).
+func hitRateColor(pct float64) string {
+	switch {
+	case pct >= 70:
+		return ansiGreen
+	case pct >= 30:
+		return ansiYellow
+	default:
+		return ansiRed
+	}
+}
+
 // Lines renders the statusline as 2 fixed lines plus an optional 3rd alert
 // line. Only one alert condition is shown at a time, in priority order:
 // critical cache > warning cache > cold cache > compact due.
@@ -82,7 +95,11 @@ func renderLine1(d Data) string {
 	dirBase := filepath.Base(d.Dir)
 	s := fmt.Sprintf("[%s] 📁 %s", d.ModelName, dirBase)
 	if d.Git.IsRepo && d.Git.Branch != "" {
-		s += fmt.Sprintf(" | 🌿 %s +%d ~%d", d.Git.Branch, d.Git.Staged, d.Git.Modified)
+		branch := d.Git.Branch
+		if d.Git.Staged > 0 || d.Git.Modified > 0 {
+			branch = colorize(d, ansiRed, branch)
+		}
+		s += fmt.Sprintf(" | 🌿 %s +%d ~%d", branch, d.Git.Staged, d.Git.Modified)
 	}
 	return s
 }
@@ -100,15 +117,19 @@ func renderLine2(d Data) string {
 	parts = append(parts, fmt.Sprintf("$%.2f", d.CostUSD))
 
 	if d.CacheHitRatePct != nil {
-		parts = append(parts, fmt.Sprintf("cache: %.0f%%", *d.CacheHitRatePct))
+		pct := *d.CacheHitRatePct
+		s := colorize(d, hitRateColor(pct), fmt.Sprintf("cache: %.0f%%", pct))
+		parts = append(parts, s)
 	}
 
 	var limitParts []string
 	if d.FiveHourPct != nil {
-		limitParts = append(limitParts, fmt.Sprintf("5h: %.0f%%", *d.FiveHourPct))
+		pct := *d.FiveHourPct
+		limitParts = append(limitParts, colorize(d, barColor(pct), fmt.Sprintf("5h: %.0f%%", pct)))
 	}
 	if d.SevenDayPct != nil {
-		limitParts = append(limitParts, fmt.Sprintf("7d: %.0f%%", *d.SevenDayPct))
+		pct := *d.SevenDayPct
+		limitParts = append(limitParts, colorize(d, barColor(pct), fmt.Sprintf("7d: %.0f%%", pct)))
 	}
 	if len(limitParts) > 0 {
 		parts = append(parts, strings.Join(limitParts, " "))
@@ -126,7 +147,7 @@ func renderAlertLine(d Data) string {
 		msg := fmt.Sprintf("🟡 cache expires in %ds", d.CacheResult.RemainingSeconds)
 		return colorize(d, ansiYellow, msg)
 	case cache.StateCold:
-		return "❄️ cache cold — next message re-reads context at full price"
+		return colorize(d, ansiRed, "❄️ cache cold — next message re-reads context at full price")
 	}
 
 	if d.ContextState == contextstate.StateCompactDue {
