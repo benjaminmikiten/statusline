@@ -13,6 +13,14 @@ go build -o statusline .
 
 ## Install
 
+### Homebrew
+
+```bash
+brew install --cask benjaminmikiten/tap/statusline
+```
+
+### From source
+
 1. Copy (or symlink) the built binary somewhere stable, e.g. `~/.claude/statusline`.
 2. Add it to your Claude Code settings (`~/.claude/settings.json`):
 
